@@ -64,14 +64,22 @@ class RHCModule(nn.Module):
         self.layers = nn.ModuleList()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # input layer
-        self.layers.append(nn.Linear(self.input_dim, self.hidden_units, device=self.device))
-        # hidden layers
-        for layer in range(self.hidden_layers):
-            self.layers.append(nn.Linear(self.hidden_units, self.hidden_units, device=self.device))
-        # output layer
-        self.layers.append(nn.Linear(self.hidden_units, self.output_dim, device=self.device))
+         # Check if hidden_units is a list with the appropriate length
+        if not isinstance(hidden_units, list) or len(hidden_units) != hidden_layers:
+            raise ValueError("hidden_units must be a list with length equal to hidden_layers")
 
+        # input layer
+        self.layers.append(nn.Linear(self.input_dim, self.hidden_units[0], device=self.device))
+        
+        # hidden layers
+        for layer in range(1, self.hidden_layers):
+            self.layers.append(nn.Linear(self.hidden_units[layer - 1], self.hidden_units[layer], device=self.device))
+        
+        # output layer
+        self.layers.append(nn.Linear(self.hidden_units[-1], self.output_dim, device=self.device))
+
+    
+        
     def forward(self, X, **kwargs):
         """
         Recipe for the forward pass.
@@ -86,11 +94,18 @@ class RHCModule(nn.Module):
         X {torch.tensor}:
             NN output data. Shape (batch_size, output_dim).
         """
+        # Pass through input layer
         X = self.activation(self.layers[0](X))
         X = self.dropout(X)
-        for i in range(self.hidden_layers):
-            X = self.activation(self.layers[i+1](X))
-        X = self.output_activation(self.layers[self.hidden_layers+1](X))
+        
+        # Pass through hidden layers
+        for i in range(1, self.hidden_layers):
+            X = self.activation(self.layers[i](X))
+            X = self.dropout(X)
+        
+        # Pass through output layer
+        X = self.output_activation(self.layers[self.hidden_layers](X))
+        
         return X
 
     def run_rhc_single_step(self, net, X_train, y_train, **fit_params):
